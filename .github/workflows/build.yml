@@ -1,29 +1,26 @@
-name: Build Android APK
+name: Build Android APK (Fixed NDK)
 
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
-    - name: Checkout repository
+    - name: Checkout code
       uses: actions/checkout@v4
 
     - name: Set up Python 3.9
       uses: actions/setup-python@v5
       with:
         python-version: '3.9'
-        cache: 'pip'
 
     - name: Install system dependencies
       run: |
-        sudo apt-get update
+        sudo apt-get update -qq
         sudo apt-get install -y \
           build-essential \
           git \
@@ -37,9 +34,6 @@ jobs:
           libavformat-dev \
           libavcodec-dev \
           zlib1g-dev \
-          libgstreamer1.0-dev \
-          gstreamer1.0-plugins-base \
-          gstreamer1.0-plugins-good \
           openjdk-17-jdk \
           autoconf \
           libtool \
@@ -47,52 +41,79 @@ jobs:
           libffi-dev \
           libssl-dev
 
-    - name: Set JAVA_HOME
+    - name: Set up Java and Android environment
       run: |
         echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
         echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
 
-    - name: Install Python dependencies
+        # 使用系统已安装的 Android SDK 和 NDK
+        echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+
+        # 🔧 关键修复：设置 NDK 路径到版本 25 或更高
+        # GitHub Actions runner 有多个 NDK 版本，使用最新的
+        if [ -d "/usr/local/lib/android/sdk/ndk/27.3.13750724" ]; then
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
+          echo "ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
+          echo "✓ Using NDK 27"
+        elif [ -d "/usr/local/lib/android/sdk/ndk-bundle" ]; then
+          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
+          echo "ANDROID_NDK=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
+          echo "✓ Using NDK bundle"
+        fi
+
+        # 显示版本信息
+        echo "=== Environment Info ==="
+        java -version
+        ls -la /usr/local/lib/android/sdk/ndk/ || echo "No NDK directory"
+
+    - name: Install Buildozer
       run: |
         python -m pip install --upgrade pip
-        pip install buildozer cython==0.29.36
-        pip install -r requirements.txt || echo "No requirements.txt found"
-
-    - name: Create requirements.txt if not exists
-      run: |
-        if [ ! -f requirements.txt ]; then
-          echo "requests" > requirements.txt
-          echo "numpy" >> requirements.txt
-          echo "urllib3" >> requirements.txt
-        fi
+        pip install --upgrade cython==0.29.36
+        pip install --upgrade buildozer==1.5.0
+        buildozer --version
 
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
         path: ~/.buildozer
-        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-ndk27-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
+          ${{ runner.os }}-buildozer-ndk27-
           ${{ runner.os }}-buildozer-
 
-    - name: Cache Buildozer local directory
-      uses: actions/cache@v4
-      with:
-        path: .buildozer
-        key: ${{ runner.os }}-buildozer-local-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          ${{ runner.os }}-buildozer-local-
-
-    - name: Build APK with Buildozer
+    - name: Verify buildozer.spec
       run: |
-        # 接受所有 Android SDK 许可
-        yes | buildozer android debug || buildozer android debug
+        echo "=== buildozer.spec content ==="
+        cat buildozer.spec
 
-    - name: List built files
+    - name: Build APK with correct NDK
       run: |
-        echo "Contents of bin directory:"
-        ls -lh bin/ || echo "No bin directory found"
+        echo "=== Build Environment ==="
+        echo "ANDROID_NDK: $ANDROID_NDK"
+        echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
+        echo "JAVA_HOME: $JAVA_HOME"
 
-    - name: Upload APK artifact
+        # 构建 APK
+        buildozer -v android debug 2>&1 | tee build_log.txt
+
+    - name: Check build result
+      run: |
+        echo "=== Searching for APK files ==="
+        find . -name "*.apk" -type f
+        if [ -d "bin" ]; then
+          echo "=== Contents of bin/ ==="
+          ls -lh bin/
+        else
+          echo "✗ Build failed - no bin/ directory"
+          echo "=== Last 100 lines of build log ==="
+          tail -100 build_log.txt
+          exit 1
+        fi
+
+    - name: Upload APK
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: android-apk
@@ -100,8 +121,16 @@ jobs:
         if-no-files-found: error
         retention-days: 30
 
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build_log.txt
+        if-no-files-found: warn
+
     - name: Create Release
-      if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ github.run_number }}
@@ -111,4 +140,3 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
