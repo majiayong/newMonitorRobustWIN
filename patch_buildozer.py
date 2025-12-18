@@ -127,17 +127,18 @@ except ImportError:
             original_content = content
 
     # Patch 4: Fix git config command output handling for Windows
-    pattern = r"(\s+cur_url = cmd\(\s+\[\"git\", \"config\", \"--get\", \"remote\.origin\.url\"\],\s+get_stdout=True,\s+cwd=p4a_dir,\s+\)\[0\]\.strip\(\))"
-    if re.search(pattern, content):
-        replacement = r"""                result = cmd(
+    # Match the full multi-line cur_url assignment
+    pattern = r'cur_url = cmd\(\s*\["git", "config", "--get", "remote\.origin\.url"\],\s*get_stdout=True,\s*cwd=p4a_dir,\s*\)\[0\]\.strip\(\)'
+    if re.search(pattern, content, re.DOTALL):
+        replacement = '''result = cmd(
                     ["git", "config", "--get", "remote.origin.url"],
                     get_stdout=True,
                     cwd=p4a_dir,
                 )
                 cur_url = result[0].strip() if result and result[0] else None
                 if not cur_url:  # If git config fails, assume it's a fresh install
-                    continue"""
-        content = re.sub(pattern, replacement, content)
+                    continue'''
+        content = re.sub(pattern, replacement, content, flags=re.DOTALL)
         if content != original_content:
             patches_applied.append("git config output handling fixed")
             original_content = content
