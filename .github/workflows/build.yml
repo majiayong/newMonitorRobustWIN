@@ -224,17 +224,23 @@ jobs:
               }
             }
 
-            # 使用更宽松的正则表达式替换整个root检查块
+            # 使用多种方法确保patch成功
             # 方法1: 替换包含getuid的if语句
             $content = $content -replace "if hasattr\(os,\s*['\`"]getuid['\`"]\):", "if False and hasattr(os, 'getuid'):"
 
             # 方法2: 直接替换getuid() == 0的检查
             $content = $content -replace "if os\.getuid\(\)\s*==\s*0:", "if False:"
 
-            # 方法3: 查找并替换包含'running as root'的整个代码块
-            # 将error()调用改为pass或注释
-            $content = $content -replace "error\(['\`"]Buildozer is running as root!", "# error('Buildozer is running as root!"
-            $content = $content -replace "error\(['\`"]This is not recommended", "# error('This is not recommended"
+            # 方法3: 注释掉包含ANSI颜色码的print语句
+            $content = $content -replace "print\('\\033\[91m\\033\[1mBuildozer is running as root!", "# print('\\033[91m\\033[1mBuildozer is running as root!"
+            $content = $content -replace "print\('\\033\[91mThis is \\033\[1mnot\\033\[0m", "# print('\\033[91mThis is \\033[1mnot\\033[0m"
+
+            # 方法4: 如果用的是双引号
+            $content = $content -replace 'print\("\\033\[91m\\033\[1mBuildozer is running as root!', '# print("\\033[91m\\033[1mBuildozer is running as root!'
+            $content = $content -replace 'print\("\\033\[91mThis is \\033\[1mnot\\033\[0m', '# print("\\033[91mThis is \\033[1mnot\\033[0m'
+
+            # 方法5: 更通用的方式 - 匹配任何包含"running as root"的print
+            $content = $content -replace "print\([^)]*running as root[^)]*\)", "# print('disabled root check')"
 
             Set-Content -Path $buildozerInitFile -Value $content -Encoding UTF8
 
