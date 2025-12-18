@@ -54,7 +54,7 @@ def patch_android_target(targets_dir):
     original_content = content
     patches_applied = []
 
-    # Patch: Comment out Windows platform check
+    # Patch 1: Comment out Windows platform check
     pattern = r"if sys\.platform == 'win32':\s+raise NotImplementedError\('Windows platform not yet working for Android'\)"
     if re.search(pattern, content):
         content = re.sub(
@@ -64,6 +64,18 @@ def patch_android_target(targets_dir):
         )
         if content != original_content:
             patches_applied.append("Windows platform check disabled")
+            original_content = content
+
+    # Patch 2: Fix _winreg import for Python 3
+    pattern = r"import _winreg"
+    if re.search(pattern, content):
+        content = re.sub(
+            pattern,
+            "import winreg as _winreg  # Patched: Python 3 compatibility",
+            content
+        )
+        if content != original_content:
+            patches_applied.append("_winreg import fixed for Python 3")
             original_content = content
 
     if patches_applied:
