@@ -24,7 +24,7 @@ android.api = 31
 android.minapi = 21
 
 # ✅ 关键修复：使用 NDK 25b 或更高版本
-# android.ndk = 25b  # 如果使用指定版本
+# android.ndk = 25b  # 如果使用指定版本添加注释
 # 或者使用系统 NDK（推荐）
 android.accept_sdk_license = True
 
