@@ -12,8 +12,6 @@ jobs:
 
     env:
       # 配置代理（macOS VPN代理）
-      HTTP_PROXY: http://127.0.0.1:7890
-      HTTPS_PROXY: http://127.0.0.1:7890
       http_proxy: http://127.0.0.1:7890
       https_proxy: http://127.0.0.1:7890
       NO_PROXY: localhost,127.0.0.1
@@ -60,8 +58,8 @@ jobs:
     - name: Install Buildozer
       run: |
         # 确保pip使用代理
-        export HTTP_PROXY=http://127.0.0.1:7890
-        export HTTPS_PROXY=http://127.0.0.1:7890
+        export http_proxy=http://127.0.0.1:7890
+        export https_proxy=http://127.0.0.1:7890
 
         python -m pip install --upgrade pip
         pip install --upgrade cython==0.29.36
@@ -90,7 +88,7 @@ jobs:
         echo "OS: $RUNNER_OS"
         python --version
         java -version 2>&1 | head -3
-        echo "HTTP_PROXY: $HTTP_PROXY"
+        echo "http_proxy: $http_proxy"
 
     - name: Build APK with correct NDK
       run: |
@@ -100,8 +98,6 @@ jobs:
         echo "JAVA_HOME: $JAVA_HOME"
 
         # 确保所有下载操作都使用代理
-        export HTTP_PROXY=http://127.0.0.1:7890
-        export HTTPS_PROXY=http://127.0.0.1:7890
         export http_proxy=http://127.0.0.1:7890
         export https_proxy=http://127.0.0.1:7890
 
