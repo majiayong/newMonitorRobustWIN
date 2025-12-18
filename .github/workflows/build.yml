@@ -7,8 +7,16 @@ on:
 
 jobs:
   build:
-    # runs-on: ubuntu-20.04
     runs-on: self-hosted
+    timeout-minutes: 180
+
+    env:
+      # 配置代理（macOS VPN代理）
+      HTTP_PROXY: http://127.0.0.1:7890
+      HTTPS_PROXY: http://127.0.0.1:7890
+      http_proxy: http://127.0.0.1:7890
+      https_proxy: http://127.0.0.1:7890
+      NO_PROXY: localhost,127.0.0.1
 
     steps:
     - name: Checkout code
@@ -19,57 +27,42 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: Install system dependencies
+    - name: 📦 Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        # macOS使用Homebrew安装依赖
+        brew install --quiet \
+          autoconf automake libtool pkg-config \
+          zlib ncurses cmake openssl ccache ninja \
+          sdl2 sdl2_image sdl2_ttf sdl2_mixer
+
+    - name: 📦 Install system dependencies (Linux)
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get update -qq
         sudo apt-get install -y \
-          build-essential \
-          git \
-          ffmpeg \
-          libsdl2-dev \
-          libsdl2-image-dev \
-          libsdl2-mixer-dev \
-          libsdl2-ttf-dev \
-          libportmidi-dev \
-          libswscale-dev \
-          libavformat-dev \
-          libavcodec-dev \
-          zlib1g-dev \
-          openjdk-17-jdk \
-          autoconf \
-          libtool \
-          pkg-config \
-          libffi-dev \
-          libssl-dev
+          build-essential git ffmpeg \
+          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+          zlib1g-dev openjdk-17-jdk \
+          autoconf libtool pkg-config libffi-dev libssl-dev
 
-    - name: Set up Java and Android environment
+    - name: Set up Java environment
       run: |
-        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-        echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
-
-        # 使用系统已安装的 Android SDK 和 NDK
-        echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-
-        # 🔧 关键修复：设置 NDK 路径到版本 25 或更高
-        # GitHub Actions runner 有多个 NDK 版本，使用最新的
-        if [ -d "/usr/local/lib/android/sdk/ndk/27.3.13750724" ]; then
-          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-          echo "ANDROID_NDK=/usr/local/lib/android/sdk/ndk/27.3.13750724" >> $GITHUB_ENV
-          echo "✓ Using NDK 27"
-        elif [ -d "/usr/local/lib/android/sdk/ndk-bundle" ]; then
-          echo "ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
-          echo "ANDROID_NDK=/usr/local/lib/android/sdk/ndk-bundle" >> $GITHUB_ENV
-          echo "✓ Using NDK bundle"
+        # macOS和Linux的Java路径不同
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          echo "Running on macOS - Java will be auto-detected"
+        else
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
         fi
-
-        # 显示版本信息
-        echo "=== Environment Info ==="
-        java -version
-        ls -la /usr/local/lib/android/sdk/ndk/ || echo "No NDK directory"
 
     - name: Install Buildozer
       run: |
+        # 确保pip使用代理
+        export HTTP_PROXY=http://127.0.0.1:7890
+        export HTTPS_PROXY=http://127.0.0.1:7890
+
         python -m pip install --upgrade pip
         pip install --upgrade cython==0.29.36
         pip install --upgrade buildozer==1.5.0
@@ -86,8 +79,18 @@ jobs:
 
     - name: Verify buildozer.spec
       run: |
+        # 配置git使用代理
+        git config --global http.proxy http://127.0.0.1:7890
+        git config --global https.proxy http://127.0.0.1:7890
+
         echo "=== buildozer.spec content ==="
         cat buildozer.spec
+
+        echo "=== Environment Info ==="
+        echo "OS: $RUNNER_OS"
+        python --version
+        java -version 2>&1 | head -3
+        echo "HTTP_PROXY: $HTTP_PROXY"
 
     - name: Build APK with correct NDK
       run: |
@@ -95,6 +98,12 @@ jobs:
         echo "ANDROID_NDK: $ANDROID_NDK"
         echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
         echo "JAVA_HOME: $JAVA_HOME"
+
+        # 确保所有下载操作都使用代理
+        export HTTP_PROXY=http://127.0.0.1:7890
+        export HTTPS_PROXY=http://127.0.0.1:7890
+        export http_proxy=http://127.0.0.1:7890
+        export https_proxy=http://127.0.0.1:7890
 
         # 构建 APK
         buildozer -v android debug 2>&1 | tee build_log.txt
