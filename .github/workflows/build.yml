@@ -227,7 +227,10 @@ jobs:
             # 使用多种方法确保patch成功 - 关键是要禁用整个root检查，包括input()调用
 
             # 方法1: 让整个check_root()方法直接return（最彻底的方案）
-            $content = $content -replace "def check_root\(self\):", "def check_root(self):`n        return  # Patched: skip root check in CI"
+            # 使用多行字符串确保换行符正确
+            $newline = [System.Environment]::NewLine
+            $replacement = "def check_root(self):$newline        return  # Patched: skip root check in CI"
+            $content = $content -replace "def check_root\(self\):", $replacement
 
             # 方法2: 替换包含getuid的if语句
             $content = $content -replace "if hasattr\(os,\s*['\`"]getuid['\`"]\):", "if False and hasattr(os, 'getuid'):"
