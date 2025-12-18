@@ -8,7 +8,7 @@ package.domain = org.crypto
 # 源代码
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas
-source.main = monitor_android_kivy.py
+# buildozer 默认使用 main.py 作为入口点
 
 # 版本
 version = 1.0.0
