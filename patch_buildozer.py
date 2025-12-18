@@ -49,10 +49,17 @@ def patch_buildozer_init(file_path):
     pattern = r"    def checkbin\(self, msg, fn\):.*?(?=\n    def )"
     if re.search(pattern, content, re.DOTALL):
         replacement = """    def checkbin(self, msg, fn):
-        # Patched: Use shutil.which for cross-platform compatibility
+        # Patched: Use shutil.which with buildozer's environment
         from shutil import which
+        from os import environ as os_environ
         self.debug('Search for {0}'.format(msg))
-        result = which(fn)
+
+        # Merge system environment with buildozer's environment
+        env = os_environ.copy()
+        env.update(self.environ)
+
+        # Search in the merged PATH
+        result = which(fn, path=env.get('PATH'))
         if result:
             self.debug(' -> found at {0}'.format(result))
             return result
@@ -62,7 +69,7 @@ def patch_buildozer_init(file_path):
 """
         content = re.sub(pattern, replacement, content, flags=re.DOTALL)
         if content != original_content:
-            patches_applied.append("checkbin replaced with shutil.which")
+            patches_applied.append("checkbin uses buildozer environment")
             original_content = content
 
     if patches_applied:
@@ -133,6 +140,21 @@ except ImportError:
         content = re.sub(pattern, replacement, content)
         if content != original_content:
             patches_applied.append("git config output handling fixed")
+            original_content = content
+
+    # Patch 5: Fix PATH separator in check_requirements - use os.pathsep instead of ':'
+    pattern = r"self\.buildozer\.environ\['PATH'\] = ':'.join\(path\)"
+    if re.search(pattern, content):
+        # Import os at the top if not already imported
+        if "import os\n" not in content[:1000]:
+            content = re.sub(r"(import sys\n)", r"\1import os\n", content, count=1)
+        content = re.sub(
+            pattern,
+            "self.buildozer.environ['PATH'] = os.pathsep.join(path)  # Patched: use os.pathsep for cross-platform",
+            content
+        )
+        if content != original_content:
+            patches_applied.append("PATH separator fixed in check_requirements")
             original_content = content
 
     if patches_applied:
