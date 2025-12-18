@@ -194,14 +194,23 @@ jobs:
     - name: Build APK
       shell: powershell
       run: |
-        # 激活虚拟环境
-        .\buildozer-venv\Scripts\Activate.ps1
-
-        # 确保 Git 在 PATH 中
+        # 确保 Git 在 PATH 中（在激活虚拟环境之前）
         $gitPath = "C:\Program Files\Git\cmd"
         if (Test-Path $gitPath) {
           $env:Path = "$gitPath;$env:Path"
         }
+
+        # 激活虚拟环境
+        .\buildozer-venv\Scripts\Activate.ps1
+
+        # 虚拟环境可能覆盖PATH，再次添加Git
+        if (Test-Path $gitPath) {
+          $env:Path = "$gitPath;$env:Path"
+        }
+
+        # 验证 git 可用
+        Write-Host "Git location: $(where.exe git)"
+        git --version
 
         Write-Host "=== Build Environment ==="
         Write-Host "JAVA_HOME: $env:JAVA_HOME"
