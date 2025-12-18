@@ -211,19 +211,40 @@ jobs:
         if (Test-Path $buildozerInitFile) {
           $content = Get-Content $buildozerInitFile -Raw
 
-          # 查找并注释掉root检查代码
-          # 查找类似 "if hasattr(os, 'getuid')" 或 "Buildozer is running as root" 的代码段
+          # 查找并移除root检查代码
           if ($content -match "running as root") {
             Write-Host "Found root check in buildozer code, patching..."
 
-            # 替换检查root的代码块，使其在Windows上跳过
-            $content = $content -replace "if hasattr\(os, 'getuid'\):", "if hasattr(os, 'getuid') and os.name != 'nt':"
+            # 显示原始代码段（调试用）
+            $lines = $content -split "`n"
+            for ($i = 0; $i -lt $lines.Length; $i++) {
+              if ($lines[$i] -match "running as root") {
+                Write-Host "Found at line $($i+1): $($lines[$i])"
+                break
+              }
+            }
 
-            # 如果有直接的getuid调用和退出
-            $content = $content -replace "if os\.getuid\(\) == 0:", "if hasattr(os, 'getuid') and os.getuid() == 0:"
+            # 使用更宽松的正则表达式替换整个root检查块
+            # 方法1: 替换包含getuid的if语句
+            $content = $content -replace "if hasattr\(os,\s*['\`"]getuid['\`"]\):", "if False and hasattr(os, 'getuid'):"
+
+            # 方法2: 直接替换getuid() == 0的检查
+            $content = $content -replace "if os\.getuid\(\)\s*==\s*0:", "if False:"
+
+            # 方法3: 查找并替换包含'running as root'的整个代码块
+            # 将error()调用改为pass或注释
+            $content = $content -replace "error\(['\`"]Buildozer is running as root!", "# error('Buildozer is running as root!"
+            $content = $content -replace "error\(['\`"]This is not recommended", "# error('This is not recommended"
 
             Set-Content -Path $buildozerInitFile -Value $content -Encoding UTF8
-            Write-Host "Buildozer patched successfully - root check disabled on Windows"
+
+            # 验证patch
+            $patchedContent = Get-Content $buildozerInitFile -Raw
+            if ($patchedContent -match "if False and hasattr") {
+              Write-Host "✓ Buildozer patched successfully - root check disabled"
+            } else {
+              Write-Host "⚠ Warning: Patch may not have been applied correctly"
+            }
           } else {
             Write-Host "Root check code not found in expected location"
           }
