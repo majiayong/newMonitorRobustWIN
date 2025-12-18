@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
 """
-Patch buildozer to skip root check in CI environments.
-This is more reliable than PowerShell regex replacements.
+Patch buildozer to work on Windows.
+This patches both the root check and the Windows platform check.
 """
 import sys
 import re
+import os
 
-def patch_buildozer(file_path):
+def patch_buildozer_init(file_path):
     """Patch buildozer __init__.py to disable root check."""
-
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
     original_content = content
     patches_applied = []
 
-    # Patch 1: Make check_root() return immediately (most thorough)
+    # Patch 1: Make check_root() return immediately
     if 'def check_root(self):' in content:
-        # Find the method and add return statement
         pattern = r'(def check_root\(self\):)'
         replacement = r'\1\n        return  # Patched: skip root check in CI'
         content = re.sub(pattern, replacement, content)
@@ -25,49 +24,80 @@ def patch_buildozer(file_path):
             patches_applied.append("check_root() early return")
             original_content = content
 
-    # Patch 2: Disable the if hasattr(os, 'getuid') check
-    pattern = r"if hasattr\(os,\s*['\"]getuid['\"]\):"
-    if re.search(pattern, content):
-        content = re.sub(pattern, "if False and hasattr(os, 'getuid'):", content)
-        if content != original_content:
-            patches_applied.append("hasattr getuid check")
-            original_content = content
-
-    # Patch 3: Disable if os.getuid() == 0
-    pattern = r"if os\.getuid\(\)\s*==\s*0:"
-    if re.search(pattern, content):
-        content = re.sub(pattern, "if False:", content)
-        if content != original_content:
-            patches_applied.append("getuid() == 0 check")
-            original_content = content
-
-    # Patch 4: Replace input() call to avoid EOFError in CI
+    # Patch 2: Replace input() call to avoid EOFError
     pattern = r"cont = input\('Are you sure you want to continue"
     if re.search(pattern, content):
         content = re.sub(
             pattern,
-            "cont = 'y'  # Patched: auto-continue in CI # input('Are you sure you want to continue",
+            "cont = 'y'  # Patched: auto-continue # input('Are you sure you want to continue",
             content
         )
         if content != original_content:
             patches_applied.append("input() call disabled")
             original_content = content
 
-    # Write patched content
     if patches_applied:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        print(f"[OK] Successfully patched buildozer: {', '.join(patches_applied)}")
-        return True
-    else:
-        print("[WARN] No patches were applied (may already be patched or code structure changed)")
-        return False
+        return patches_applied
+    return []
+
+def patch_android_target(targets_dir):
+    """Patch buildozer/targets/android.py to allow Windows."""
+    android_py = os.path.join(targets_dir, 'android.py')
+    if not os.path.exists(android_py):
+        return []
+
+    with open(android_py, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    original_content = content
+    patches_applied = []
+
+    # Patch: Comment out Windows platform check
+    pattern = r"if sys\.platform == 'win32':\s+raise NotImplementedError\('Windows platform not yet working for Android'\)"
+    if re.search(pattern, content):
+        content = re.sub(
+            pattern,
+            "# Patched: Allow Windows platform\n# if sys.platform == 'win32':\n#     raise NotImplementedError('Windows platform not yet working for Android')",
+            content
+        )
+        if content != original_content:
+            patches_applied.append("Windows platform check disabled")
+            original_content = content
+
+    if patches_applied:
+        with open(android_py, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return patches_applied
+    return []
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: python patch_buildozer.py <path_to_buildozer_init.py>")
         sys.exit(1)
 
-    file_path = sys.argv[1]
-    success = patch_buildozer(file_path)
-    sys.exit(0 if success else 1)
+    init_file = sys.argv[1]
+    targets_dir = os.path.join(os.path.dirname(init_file), 'targets')
+
+    all_patches = []
+
+    # Patch __init__.py
+    patches = patch_buildozer_init(init_file)
+    if patches:
+        all_patches.extend(patches)
+        print(f"[OK] Patched __init__.py: {', '.join(patches)}")
+
+    # Patch android.py
+    patches = patch_android_target(targets_dir)
+    if patches:
+        all_patches.extend(patches)
+        print(f"[OK] Patched android.py: {', '.join(patches)}")
+
+    if all_patches:
+        print(f"[OK] Successfully applied {len(all_patches)} patch(es)")
+        sys.exit(0)
+    else:
+        print("[WARN] No patches were applied")
+        sys.exit(1)
+
