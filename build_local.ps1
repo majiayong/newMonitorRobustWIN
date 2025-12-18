@@ -141,6 +141,15 @@ Write-Host ""
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUNBUFFERED = "1"
 
+# 再次确保 Git 和 Java 在 PATH 中（buildozer需要）
+$gitPath = "C:\Program Files\Git\cmd"
+if (Test-Path $gitPath) {
+    $env:Path = "$gitPath;$env:Path"
+}
+if ($env:JAVA_HOME) {
+    $env:Path = "$env:JAVA_HOME\bin;$env:Path"
+}
+
 # 显示 buildozer 版本
 buildozer --version
 
