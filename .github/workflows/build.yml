@@ -71,6 +71,12 @@ jobs:
         export http_proxy=http://127.0.0.1:7890
         export https_proxy=http://127.0.0.1:7890
 
+        # 创建虚拟环境 (macOS需要)
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          python3 -m venv ~/buildozer-venv
+          source ~/buildozer-venv/bin/activate
+        fi
+
         python3 -m pip install --upgrade pip
         pip3 install --upgrade cython==0.29.36
         pip3 install --upgrade buildozer==1.5.0
@@ -87,6 +93,11 @@ jobs:
 
     - name: Verify buildozer.spec
       run: |
+        # macOS激活虚拟环境
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          source ~/buildozer-venv/bin/activate
+        fi
+
         # 配置git使用代理
         git config --global http.proxy http://127.0.0.1:7890
         git config --global https.proxy http://127.0.0.1:7890
@@ -102,6 +113,11 @@ jobs:
 
     - name: Build APK with correct NDK
       run: |
+        # macOS激活虚拟环境
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          source ~/buildozer-venv/bin/activate
+        fi
+
         echo "=== Build Environment ==="
         echo "ANDROID_NDK: $ANDROID_NDK"
         echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
