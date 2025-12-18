@@ -182,6 +182,7 @@ jobs:
         Write-Host "=== Build Environment ==="
         Write-Host "JAVA_HOME: $env:JAVA_HOME"
         Write-Host "Python: $(python --version)"
+        Write-Host "Current User: $env:USERNAME"
 
         # 设置并行编译（使用所有CPU核心）
         $cpuCores = (Get-WmiObject Win32_ComputerSystem).NumberOfLogicalProcessors
@@ -191,13 +192,64 @@ jobs:
         $env:MAX_JOBS = $cpuCores
         $env:GRADLE_OPTS = "-Xmx2048m -Dorg.gradle.jvmargs=-Xmx2048m"
 
+        # Buildozer 在Windows上可能错误地检测为root用户
+        # 设置环境变量跳过root检查（仅警告，不阻止）
+        $env:BUILDOZER_WARN_ON_ROOT = "1"
+
+        # 由于Windows没有真正的root概念，我们需要修改buildozer
+        Write-Host "=== Patching Buildozer for Windows ==="
+        $buildozerPath = (Get-Command buildozer).Source
+        $buildozerCode = Get-Content $buildozerPath -Raw
+
+        # 检查是否需要patch（查找root检查代码）
+        if ($buildozerCode -match "getuid") {
+          Write-Host "Buildozer contains root check, creating patched version..."
+
+          # 创建临时的buildozer wrapper脚本
+          $wrapperScript = @"
+import sys
+import os
+
+# 临时禁用root检查：在Windows上伪装getuid
+if sys.platform == 'win32':
+    # 保存原始的os.getuid（如果存在）
+    _original_getuid = getattr(os, 'getuid', None)
+    # 在Windows上，os.getuid不存在，但buildozer可能检查其他方式
+    # 设置一个非零值来模拟非root用户
+    if not hasattr(os, 'getuid'):
+        os.getuid = lambda: 1000
+
+# 导入并运行buildozer
+from buildozer.scripts.client import main
+main()
+"@
+
+          $wrapperPath = ".\buildozer_wrapper.py"
+          Set-Content -Path $wrapperPath -Value $wrapperScript -Encoding UTF8
+          Write-Host "Created wrapper script at: $wrapperPath"
+        }
+
         Write-Host "=== Starting APK Build ==="
         Write-Host "This may take a while (30-60 minutes for first build)..."
 
         # 构建 APK (保存日志)
-        buildozer -v android debug 2>&1 | Tee-Object -FilePath build_log.txt
-
-        Write-Host "=== Build completed ==="
+        # 使用wrapper script而不是直接调用buildozer
+        try {
+          if (Test-Path ".\buildozer_wrapper.py") {
+            python .\buildozer_wrapper.py -v android debug 2>&1 | Tee-Object -FilePath build_log.txt
+          } else {
+            buildozer -v android debug 2>&1 | Tee-Object -FilePath build_log.txt
+          }
+          Write-Host "=== Build completed ==="
+        } catch {
+          Write-Host "=== Build failed with error ==="
+          Write-Host $_.Exception.Message
+          Write-Host "=== Last 200 lines of build log ==="
+          if (Test-Path build_log.txt) {
+            Get-Content build_log.txt -Tail 200
+          }
+          throw
+        }
 
     - name: Check build result
       shell: powershell
