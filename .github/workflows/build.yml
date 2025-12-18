@@ -78,6 +78,8 @@ jobs:
         fi
 
         python3 -m pip install --upgrade pip
+        # 安装setuptools以提供distutils (Python 3.13+需要)
+        pip3 install --upgrade setuptools
         pip3 install --upgrade cython==0.29.36
         pip3 install --upgrade buildozer==1.5.0
         buildozer --version
