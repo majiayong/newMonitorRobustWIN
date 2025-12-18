@@ -11,10 +11,16 @@ jobs:
     timeout-minutes: 180
 
     env:
-      # 配置代理（Windows代理 - 根据你的实际代理地址修改或删除）
+      # 配置代理（如果第一次下载actions很慢，可以启用代理）
+      # 如果你有代理服务器，取消下面3行的注释并修改为你的代理地址
       # http_proxy: http://127.0.0.1:7890
       # https_proxy: http://127.0.0.1:7890
       # NO_PROXY: localhost,127.0.0.1
+
+      # Actions缓存说明：
+      # - 首次运行需要下载actions，会比较慢（约2-5分钟）
+      # - 下载后会缓存到 E:\actions-runner\_work\_actions\
+      # - 后续构建会直接使用缓存，速度很快
       PYTHONUNBUFFERED: 1
 
     steps:
