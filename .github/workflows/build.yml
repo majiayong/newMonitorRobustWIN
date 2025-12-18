@@ -244,12 +244,36 @@ jobs:
 
             Set-Content -Path $buildozerInitFile -Value $content -Encoding UTF8
 
-            # 验证patch
+            # 验证patch - 检查多种可能的模式
             $patchedContent = Get-Content $buildozerInitFile -Raw
-            if ($patchedContent -match "if False and hasattr") {
-              Write-Host "✓ Buildozer patched successfully - root check disabled"
-            } else {
+            $checkPatterns = @(
+              "if False and hasattr",
+              "if False:",
+              "# print.*running as root",
+              "# print\('disabled root check'\)"
+            )
+            $patchSuccess = $false
+            foreach ($pattern in $checkPatterns) {
+              if ($patchedContent -match $pattern) {
+                Write-Host "✓ Buildozer patched successfully - found pattern: $pattern"
+                $patchSuccess = $true
+                break
+              }
+            }
+            if (-not $patchSuccess) {
               Write-Host "⚠ Warning: Patch may not have been applied correctly"
+              Write-Host "Debug: Showing lines around 'running as root':"
+              $lines = $patchedContent -split "`n"
+              for ($i = 0; $i -lt $lines.Length; $i++) {
+                if ($lines[$i] -match "running as root") {
+                  $start = [Math]::Max(0, $i - 2)
+                  $end = [Math]::Min($lines.Length - 1, $i + 2)
+                  for ($j = $start; $j -le $end; $j++) {
+                    Write-Host "$($j+1): $($lines[$j])"
+                  }
+                  break
+                }
+              }
             }
           } else {
             Write-Host "Root check code not found in expected location"
@@ -261,16 +285,42 @@ jobs:
         Write-Host "=== Starting APK Build ==="
         Write-Host "This may take a while (30-60 minutes for first build)..."
 
-        # 构建 APK (保存日志)
+        # 设置Python输出为UTF-8，确保错误信息被正确捕获
+        $env:PYTHONIOENCODING = "utf-8"
+        $env:PYTHONUNBUFFERED = "1"
+
+        # 构建 APK (使用更强的错误捕获)
+        $ErrorActionPreference = "Continue"  # 确保即使buildozer崩溃也能捕获输出
+
+        # 使用Start-Transcript捕获所有输出
+        $transcriptFile = "build_transcript.txt"
+        Start-Transcript -Path $transcriptFile
+
         try {
-          buildozer -v android debug 2>&1 | Tee-Object -FilePath build_log.txt
-          Write-Host "=== Build completed ==="
+          # 直接运行，让所有输出都被transcript捕获
+          & buildozer -v android debug
+          $buildExitCode = $LASTEXITCODE
+
+          Stop-Transcript
+
+          if ($buildExitCode -ne 0) {
+            Write-Host "=== Build failed with exit code: $buildExitCode ==="
+            Write-Host "=== Full build transcript ==="
+            if (Test-Path $transcriptFile) {
+              Get-Content $transcriptFile | Select-Object -Last 300
+            }
+            throw "Build failed with exit code $buildExitCode"
+          } else {
+            Write-Host "=== Build completed successfully ==="
+          }
         } catch {
-          Write-Host "=== Build failed with error ==="
+          Stop-Transcript -ErrorAction SilentlyContinue
+          Write-Host "=== Build failed with exception ==="
           Write-Host $_.Exception.Message
-          Write-Host "=== Last 200 lines of build log ==="
-          if (Test-Path build_log.txt) {
-            Get-Content build_log.txt -Tail 200
+          Write-Host $_.ScriptStackTrace
+          Write-Host "=== Full build transcript ==="
+          if (Test-Path $transcriptFile) {
+            Get-Content $transcriptFile | Select-Object -Last 300
           }
           throw
         }
