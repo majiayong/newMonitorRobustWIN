@@ -36,6 +36,15 @@ def patch_buildozer_init(file_path):
             patches_applied.append("input() call disabled")
             original_content = content
 
+    # Patch 3: Fix PATH separator in checkbin for Windows
+    pattern = r"for dn in environ\['PATH'\]\.split\(':'\):"
+    if re.search(pattern, content):
+        replacement = "for dn in environ['PATH'].split(os.pathsep):  # Patched: Windows compatibility"
+        content = re.sub(pattern, replacement, content)
+        if content != original_content:
+            patches_applied.append("PATH separator fixed for Windows")
+            original_content = content
+
     if patches_applied:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
