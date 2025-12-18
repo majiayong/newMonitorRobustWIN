@@ -198,98 +198,16 @@ jobs:
         $env:MAX_JOBS = $cpuCores
         $env:GRADLE_OPTS = "-Xmx2048m -Dorg.gradle.jvmargs=-Xmx2048m"
 
-        # 直接修改buildozer源代码移除root检查
+        # 直接修改buildozer源代码移除root检查（使用Python脚本，更可靠）
         Write-Host "=== Patching Buildozer source code ==="
 
         $buildozerModule = python -c "import buildozer; print(buildozer.__file__)"
-        $buildozerDir = Split-Path $buildozerModule -Parent
-        $buildozerInitFile = Join-Path $buildozerDir "__init__.py"
-
         Write-Host "Buildozer module location: $buildozerModule"
-        Write-Host "Patching file: $buildozerInitFile"
 
-        if (Test-Path $buildozerInitFile) {
-          $content = Get-Content $buildozerInitFile -Raw
-
-          # 查找并移除root检查代码
-          if ($content -match "running as root") {
-            Write-Host "Found root check in buildozer code, patching..."
-
-            # 显示原始代码段（调试用）
-            $lines = $content -split "`n"
-            for ($i = 0; $i -lt $lines.Length; $i++) {
-              if ($lines[$i] -match "running as root") {
-                Write-Host "Found at line $($i+1): $($lines[$i])"
-                break
-              }
-            }
-
-            # 使用多种方法确保patch成功 - 关键是要禁用整个root检查，包括input()调用
-
-            # 方法1: 让整个check_root()方法直接return（最彻底的方案）
-            # 使用多行字符串确保换行符正确
-            $newline = [System.Environment]::NewLine
-            $replacement = "def check_root(self):$newline        return  # Patched: skip root check in CI"
-            $content = $content -replace "def check_root\(self\):", $replacement
-
-            # 方法2: 替换包含getuid的if语句
-            $content = $content -replace "if hasattr\(os,\s*['\`"]getuid['\`"]\):", "if False and hasattr(os, 'getuid'):"
-
-            # 方法3: 直接替换getuid() == 0的检查
-            $content = $content -replace "if os\.getuid\(\)\s*==\s*0:", "if False:"
-
-            # 方法4: 注释掉包含ANSI颜色码的print语句
-            $content = $content -replace "print\('\\033\[91m\\033\[1mBuildozer is running as root!", "# print('\\033[91m\\033[1mBuildozer is running as root!"
-            $content = $content -replace "print\('\\033\[91mThis is \\033\[1mnot\\033\[0m", "# print('\\033[91mThis is \\033[1mnot\\033[0m"
-
-            # 方法5: 如果用的是双引号
-            $content = $content -replace 'print\("\\033\[91m\\033\[1mBuildozer is running as root!', '# print("\\033[91m\\033[1mBuildozer is running as root!'
-            $content = $content -replace 'print\("\\033\[91mThis is \\033\[1mnot\\033\[0m', '# print("\\033[91mThis is \\033[1mnot\\033[0m'
-
-            # 方法6: 更通用的方式 - 匹配任何包含"running as root"的print
-            $content = $content -replace "print\([^)]*running as root[^)]*\)", "# print('disabled root check')"
-
-            # 方法7: 最关键 - 注释掉input()调用，这是导致EOFError的罪魁祸首
-            $content = $content -replace "cont = input\('Are you sure you want to continue", "cont = 'y'  # Patched: auto-continue # input('Are you sure you want to continue"
-
-            Set-Content -Path $buildozerInitFile -Value $content -Encoding UTF8
-
-            # 验证patch - 检查多种可能的模式
-            $patchedContent = Get-Content $buildozerInitFile -Raw
-            $checkPatterns = @(
-              "def check_root\(self\):\s+return",  # 方法1：直接return
-              "if False and hasattr",               # 方法2
-              "if False:",                          # 方法3
-              "# print.*running as root",           # 方法4-6
-              "# print\('disabled root check'\)",   # 方法6
-              "cont = 'y'.*# Patched: auto-continue"  # 方法7：最关键
-            )
-            $patchSuccess = $false
-            $patchedPatterns = @()
-            foreach ($pattern in $checkPatterns) {
-              if ($patchedContent -match $pattern) {
-                $patchedPatterns += $pattern
-                $patchSuccess = $true
-              }
-            }
-            if ($patchSuccess) {
-              Write-Host "✓ Buildozer patched successfully - found $($patchedPatterns.Count) pattern(s)"
-              Write-Host "  Patched patterns: $($patchedPatterns -join ', ')"
-            } else {
-              Write-Host "⚠ Warning: Patch may not have been applied correctly"
-              Write-Host "Debug: Showing context around line 1042 (input call):"
-              $lines = $patchedContent -split "`n"
-              for ($i = 0; $i -lt $lines.Length; $i++) {
-                if ($i -ge 1036 -and $i -le 1046) {  # 显示1037-1047行
-                  Write-Host "$($i+1): $($lines[$i])"
-                }
-              }
-            }
-          } else {
-            Write-Host "Root check code not found in expected location"
-          }
-        } else {
-          Write-Host "Warning: Could not find buildozer __init__.py file"
+        # 使用Python脚本进行patch（比PowerShell正则更可靠）
+        python patch_buildozer.py "$buildozerModule"
+        if ($LASTEXITCODE -ne 0) {
+          Write-Host "Warning: Buildozer patch script failed, will try to continue anyway"
         }
 
         Write-Host "=== Starting APK Build ==="
