@@ -213,6 +213,12 @@ jobs:
         Write-Host "=== Starting APK Build ==="
         Write-Host "This may take a while (30-60 minutes for first build)..."
 
+        # 调试信息
+        Write-Host "Current directory: $(Get-Location)"
+        Write-Host "buildozer.spec exists: $(Test-Path buildozer.spec)"
+        Write-Host "Buildozer version:"
+        buildozer --version
+
         # 设置Python输出为UTF-8，确保错误信息被正确捕获
         $env:PYTHONIOENCODING = "utf-8"
         $env:PYTHONUNBUFFERED = "1"

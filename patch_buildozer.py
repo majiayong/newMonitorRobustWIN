@@ -57,10 +57,10 @@ def patch_buildozer(file_path):
     if patches_applied:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        print(f"✓ Successfully patched buildozer: {', '.join(patches_applied)}")
+        print(f"[OK] Successfully patched buildozer: {', '.join(patches_applied)}")
         return True
     else:
-        print("⚠ Warning: No patches were applied (may already be patched or code structure changed)")
+        print("[WARN] No patches were applied (may already be patched or code structure changed)")
         return False
 
 if __name__ == '__main__':
