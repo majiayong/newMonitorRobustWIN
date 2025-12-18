@@ -23,12 +23,13 @@ android.permissions = INTERNET,VIBRATE,WAKE_LOCK
 android.api = 31
 android.minapi = 21
 
-# ✅ 关键修复：使用 NDK 25b 或更高版本
-# android.ndk = 25b  # 如果使用指定版本添加注释
-# 或者使用系统 NDK（推荐）
+# NDK 配置
+# Buildozer 会自动下载兼容的 NDK 版本
+# 在 Windows 上建议让 Buildozer 自动处理 NDK
 android.accept_sdk_license = True
 
 # 架构 - 只构建 arm64 加快速度
+# Windows 上构建 APK 时建议只使用 arm64-v8a 架构以节省时间
 android.archs = arm64-v8a
 
 # 屏幕方向
@@ -40,6 +41,7 @@ p4a.bootstrap = sdl2
 
 # 源码排除
 source.exclude_exts = spec
+source.exclude_dirs = tests, bin, .venv, buildozer-venv, __pycache__
 
 # 包含字体文件
 source.include_patterns = fonts/*.otf,fonts/*.ttf
@@ -49,11 +51,8 @@ log_level = 2
 warn_on_root = 1
 
 # ========== 性能优化配置 ==========
-# 启用 ccache 加速 C/C++ 编译（可节省 50% 编译时间）
-android.gradle_dependencies =
-
 # 并行编译配置
-# 让 Python-for-Android 使用多核心编译
+# Python-for-Android 会使用 MAX_JOBS 环境变量（在 GitHub Actions 中设置）
 p4a.local_recipes =
 p4a.hook =
 

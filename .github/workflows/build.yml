@@ -1,4 +1,4 @@
-name: Build Android APK (Fixed NDK)
+name: Build Android APK (Windows)
 
 on:
   push:
@@ -11,193 +11,158 @@ jobs:
     timeout-minutes: 180
 
     env:
-      # 配置代理（macOS VPN代理）
-      http_proxy: http://127.0.0.1:7890
-      https_proxy: http://127.0.0.1:7890
-      NO_PROXY: localhost,127.0.0.1
+      # 配置代理（Windows代理 - 根据你的实际代理地址修改或删除）
+      # http_proxy: http://127.0.0.1:7890
+      # https_proxy: http://127.0.0.1:7890
+      # NO_PROXY: localhost,127.0.0.1
+      PYTHONUNBUFFERED: 1
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python (macOS)
-      if: runner.os == 'macOS'
-      run: |
-        # macOS self-hosted runner使用系统Python
-        which python3
-        python3 --version
-        # 确保使用python3作为python命令
-        echo "使用系统Python: $(python3 --version)"
-
-    - name: Set up Python 3.9 (Linux)
-      if: runner.os == 'Linux'
+    - name: Set up Python 3.9
       uses: actions/setup-python@v5
       with:
         python-version: '3.9'
 
-    - name: 📦 Install system dependencies (macOS)
-      if: runner.os == 'macOS'
+    - name: Install Chocolatey packages
+      shell: powershell
       run: |
-        # macOS使用Homebrew安装依赖
-        brew install --quiet \
-          autoconf automake libtool pkg-config \
-          zlib ncurses cmake openssl ccache ninja \
-          sdl2 sdl2_image sdl2_ttf sdl2_mixer
+        # 安装必要的工具
+        Write-Host "检查并安装必要的工具..."
 
-    - name: 📦 Install system dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -y \
-          build-essential git ffmpeg \
-          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
-          zlib1g-dev openjdk-17-jdk \
-          autoconf libtool pkg-config libffi-dev libssl-dev
+        # 检查是否已安装 git
+        if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+          choco install git -y
+        }
+
+        # 检查是否已安装 openjdk
+        if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+          choco install openjdk17 -y
+          refreshenv
+        }
 
     - name: Set up Java environment
+      shell: powershell
       run: |
-        # macOS和Linux的Java路径不同
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          echo "Running on macOS - Java will be auto-detected"
-        else
-          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
-          echo "/usr/lib/jvm/java-17-openjdk-amd64/bin" >> $GITHUB_PATH
-        fi
+        # 查找 Java 安装路径
+        $javaPath = (Get-Command java -ErrorAction SilentlyContinue).Source
+        if ($javaPath) {
+          $javaHome = (Get-Item $javaPath).Directory.Parent.FullName
+          Write-Host "Java found at: $javaHome"
+          echo "JAVA_HOME=$javaHome" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          echo "$javaHome\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        } else {
+          Write-Host "Java not found, will use system default"
+        }
 
     - name: Install Buildozer
+      shell: powershell
       run: |
-        # 确保pip使用代理
-        export http_proxy=http://127.0.0.1:7890
-        export https_proxy=http://127.0.0.1:7890
+        Write-Host "Installing Buildozer and dependencies..."
 
-        # 创建虚拟环境 (macOS需要)
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          python3 -m venv ~/buildozer-venv
-          source ~/buildozer-venv/bin/activate
-        fi
+        # 创建虚拟环境
+        python -m venv buildozer-venv
 
-        python3 -m pip install --upgrade pip
-        # 安装setuptools以提供distutils (Python 3.13+需要)
-        pip3 install --upgrade setuptools
-        pip3 install --upgrade cython==0.29.36
-        pip3 install --upgrade buildozer==1.5.0
+        # 激活虚拟环境
+        .\buildozer-venv\Scripts\Activate.ps1
+
+        # 升级 pip
+        python -m pip install --upgrade pip
+
+        # 安装 setuptools (Python 3.13+ 需要)
+        pip install --upgrade setuptools
+
+        # 安装 Cython 和 Buildozer
+        pip install --upgrade cython==0.29.36
+        pip install --upgrade buildozer==1.5.0
+
+        # 验证安装
         buildozer --version
 
     - name: Cache Buildozer global directory
       uses: actions/cache@v4
       with:
-        path: ~/.buildozer
+        path: ~\.buildozer
         key: ${{ runner.os }}-buildozer-ndk27-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
           ${{ runner.os }}-buildozer-ndk27-
           ${{ runner.os }}-buildozer-
 
-    - name: Cache ccache directory
-      uses: actions/cache@v4
-      with:
-        path: ~/.ccache
-        key: ${{ runner.os }}-ccache-${{ github.sha }}
-        restore-keys: |
-          ${{ runner.os }}-ccache-
-
-    - name: Setup ccache
-      run: |
-        # 安装并配置 ccache
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          brew install ccache 2>/dev/null || echo "ccache already installed"
-        else
-          sudo apt-get install -y ccache
-        fi
-
-        # 配置 ccache
-        ccache --max-size=2G
-        ccache --set-config=compression=true
-        ccache --set-config=compression_level=6
-        ccache -z  # 重置统计
-
-        # 将 ccache 添加到 PATH
-        export PATH="/usr/local/opt/ccache/libexec:$PATH"
-        echo "PATH=/usr/local/opt/ccache/libexec:$PATH" >> $GITHUB_ENV
-
     - name: Verify buildozer.spec
+      shell: powershell
       run: |
-        # macOS激活虚拟环境
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          source ~/buildozer-venv/bin/activate
-        fi
+        # 激活虚拟环境
+        .\buildozer-venv\Scripts\Activate.ps1
 
-        # 配置git使用代理
-        git config --global http.proxy http://127.0.0.1:7890
-        git config --global https.proxy http://127.0.0.1:7890
+        Write-Host "=== buildozer.spec content ==="
+        Get-Content buildozer.spec
 
-        echo "=== buildozer.spec content ==="
-        cat buildozer.spec
+        Write-Host "=== Environment Info ==="
+        Write-Host "OS: Windows"
+        python --version
+        java -version
+        Write-Host "JAVA_HOME: $env:JAVA_HOME"
 
-        echo "=== Environment Info ==="
-        echo "OS: $RUNNER_OS"
-        python3 --version
-        java -version 2>&1 | head -3
-        echo "http_proxy: $http_proxy"
-
-    - name: Build APK with correct NDK
+    - name: Install Android SDK and NDK
+      shell: powershell
       run: |
-        # macOS激活虚拟环境
-        if [[ "$RUNNER_OS" == "macOS" ]]; then
-          source ~/buildozer-venv/bin/activate
-        fi
+        # 激活虚拟环境
+        .\buildozer-venv\Scripts\Activate.ps1
 
-        echo "=== Build Environment ==="
-        echo "ANDROID_NDK: $ANDROID_NDK"
-        echo "ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
-        echo "JAVA_HOME: $JAVA_HOME"
+        Write-Host "=== Installing Android SDK ==="
+        # Buildozer 会自动下载 Android SDK 和 NDK
+        # 这里只需要确保有足够的磁盘空间
 
-        # 确保所有下载操作都使用代理
-        export http_proxy=http://127.0.0.1:7890
-        export https_proxy=http://127.0.0.1:7890
+        # 创建 .buildozer 目录（如果不存在）
+        $buildozerDir = "$env:USERPROFILE\.buildozer"
+        if (-not (Test-Path $buildozerDir)) {
+          New-Item -ItemType Directory -Path $buildozerDir -Force
+          Write-Host "Created .buildozer directory at: $buildozerDir"
+        }
 
-        # ========== 性能优化配置 ==========
-        # 1. 启用 ccache
-        export USE_CCACHE=1
-        export CCACHE_DIR=~/.ccache
-        export PATH="/usr/local/opt/ccache/libexec:$PATH"
+    - name: Build APK
+      shell: powershell
+      run: |
+        # 激活虚拟环境
+        .\buildozer-venv\Scripts\Activate.ps1
 
-        # 2. 设置并行编译（使用所有CPU核心）
-        export MAKEFLAGS="-j$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
-        echo "使用 $MAKEFLAGS 进行并行编译"
+        Write-Host "=== Build Environment ==="
+        Write-Host "JAVA_HOME: $env:JAVA_HOME"
+        Write-Host "Python: $(python --version)"
 
-        # 3. Python-for-Android 并行编译环境变量
-        export MAX_JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        # 设置并行编译（使用所有CPU核心）
+        $cpuCores = (Get-WmiObject Win32_ComputerSystem).NumberOfLogicalProcessors
+        Write-Host "Using $cpuCores CPU cores for parallel compilation"
 
-        # 4. 减少 Gradle 内存使用
-        export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.jvmargs=-Xmx2048m"
+        # 设置环境变量
+        $env:MAX_JOBS = $cpuCores
+        $env:GRADLE_OPTS = "-Xmx2048m -Dorg.gradle.jvmargs=-Xmx2048m"
 
-        echo "=== 性能优化设置 ==="
-        echo "USE_CCACHE: $USE_CCACHE"
-        echo "MAKEFLAGS: $MAKEFLAGS"
-        echo "MAX_JOBS: $MAX_JOBS"
-        ccache -s || echo "ccache stats not available"
+        Write-Host "=== Starting APK Build ==="
+        Write-Host "This may take a while (30-60 minutes for first build)..."
 
-        # 构建 APK
-        buildozer -v android debug 2>&1 | tee build_log.txt
+        # 构建 APK (保存日志)
+        buildozer -v android debug 2>&1 | Tee-Object -FilePath build_log.txt
 
-        # 显示 ccache 统计
-        echo "=== ccache 编译统计 ==="
-        ccache -s || echo "ccache stats not available"
+        Write-Host "=== Build completed ==="
 
     - name: Check build result
+      shell: powershell
       run: |
-        echo "=== Searching for APK files ==="
-        find . -name "*.apk" -type f
-        if [ -d "bin" ]; then
-          echo "=== Contents of bin/ ==="
-          ls -lh bin/
-        else
-          echo "✗ Build failed - no bin/ directory"
-          echo "=== Last 100 lines of build log ==="
-          tail -100 build_log.txt
+        Write-Host "=== Searching for APK files ==="
+        Get-ChildItem -Path . -Filter "*.apk" -Recurse -File | Select-Object FullName
+
+        if (Test-Path "bin") {
+          Write-Host "=== Contents of bin/ ==="
+          Get-ChildItem -Path bin | Format-Table Name, Length, LastWriteTime -AutoSize
+        } else {
+          Write-Host "Build failed - no bin/ directory"
+          Write-Host "=== Last 100 lines of build log ==="
+          Get-Content build_log.txt -Tail 100
           exit 1
-        fi
+        }
 
     - name: Upload APK
       if: success()

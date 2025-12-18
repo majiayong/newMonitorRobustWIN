@@ -1,0 +1,24 @@
+  问题原因：
+  PATH环境变量中有3个Java路径，系统按顺序查找，第一个找到的是：
+  1. C:\Program Files (x86)\Common Files\Oracle\Java\javapath\java.exe ← 这是JDK 8（优先使用）
+  2. F:\tool\jdk17\bin\java.exe ← 这是你的JDK 17
+  3. C:\Program Files\Common Files\Oracle\Java\javapath\java.exe
+
+  解决方案：
+
+  你需要调整PATH环境变量的顺序，让JDK 17的路径排在前面。步骤如下：
+
+  1. 打开环境变量设置：
+    - 按 Win + X，选择"系统"
+    - 点击"高级系统设置" → "环境变量"
+  2. 编辑PATH变量（在"用户变量"或"系统变量"中）：
+    - 找到 Path 变量，点击"编辑"
+    - 将 F:\tool\jdk17\bin 移动到最上面（或至少在Oracle的javapath之前）
+    - 或者删除这两个旧的Oracle路径：
+        - C:\Program Files (x86)\Common Files\Oracle\Java\javapath
+      - C:\Program Files\Common Files\Oracle\Java\javapath
+  3. 设置JAVA_HOME：
+    - 确保 JAVA_HOME 变量设置为 F:\tool\jdk17
+    - 确保PATH中有 %JAVA_HOME%\bin
+  4. 重启PowerShell，然后再次运行：
+  java -version

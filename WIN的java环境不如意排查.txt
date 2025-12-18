@@ -1,0 +1,68 @@
+
+● 根据项目配置文件，如果要在本地Windows系统上构建Android APK，你需要安装以下内容：
+
+  必需软件
+
+  1. Chocolatey (Windows包管理器)
+
+  打开PowerShell (管理员模式)，运行：
+  Set-ExecutionPolicy Bypass -Scope Process -Force
+  [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+  iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+  2. Python 3.9
+
+  choco install python39 -y
+
+  3. Java JDK 17
+
+  choco install openjdk17 -y
+  refreshenv
+  # 验证安装
+  java -version
+
+  4. Git
+
+  choco install git -y
+
+  5. Buildozer 及依赖
+
+  # 创建虚拟环境
+  python -m venv buildozer-venv
+
+  # 激活虚拟环境
+  .\buildozer-venv\Scripts\Activate.ps1
+
+  # 安装依赖
+  pip install --upgrade pip setuptools
+  pip install cython==0.29.36
+  pip install buildozer==1.5.0
+
+  可选软件
+
+  如果遇到编译错误，可能需要：
+  choco install visualstudio2022buildtools -y
+  choco install visualstudio2022-workload-vctools -y
+
+  硬件要求
+
+  - 磁盘空间: 至少 20GB (Android SDK + NDK需要大量空间)
+  - 内存: 至少 8GB RAM (推荐 16GB)
+  - CPU: 多核处理器 (会使用所有核心并行编译)
+
+  本地构建步骤
+
+  安装完成后，在项目目录运行：
+  # 1. 激活虚拟环境
+  .\buildozer-venv\Scripts\Activate.ps1
+
+  # 2. 构建 APK
+  buildozer -v android debug
+
+  注意: 首次构建需要30-60分钟，因为需要下载Android SDK和NDK (约10-20GB数据)。构建的APK会保存在 bin/ 目录。
+
+  代理配置 (可选)
+
+  如果需要代理访问，编辑 .github/workflows/build.yml:14-17 取消注释并修改为你的代理地址。
+
+  需要我帮你开始安装这些软件吗？
