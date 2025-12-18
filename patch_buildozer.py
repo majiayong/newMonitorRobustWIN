@@ -36,13 +36,33 @@ def patch_buildozer_init(file_path):
             patches_applied.append("input() call disabled")
             original_content = content
 
-    # Patch 3: Fix PATH separator in checkbin for Windows
-    pattern = r"for dn in environ\['PATH'\]\.split\(':'\):"
+    # Patch 3: Fix PATH separator in checkbin for Windows + add debug
+    pattern = r"(    def checkbin\(self, msg, fn\):)\n(        self\.debug\('Search for \{0\}'\.format\(msg\)\))"
     if re.search(pattern, content):
-        replacement = "for dn in environ['PATH'].split(os.pathsep):  # Patched: Windows compatibility"
+        replacement = r"\1\n\2\n        # DEBUG: Print PATH\n        import sys\n        self.debug('PATH separator: ' + repr(os.pathsep))\n        self.debug('PATH value: ' + environ.get('PATH', 'NOT SET')[:200])"
         content = re.sub(pattern, replacement, content)
         if content != original_content:
-            patches_applied.append("PATH separator fixed for Windows")
+            patches_applied.append("checkbin debug added")
+            original_content = content
+
+    # Patch 4: Replace entire checkbin method with Windows-compatible version
+    pattern = r"    def checkbin\(self, msg, fn\):.*?(?=\n    def )"
+    if re.search(pattern, content, re.DOTALL):
+        replacement = """    def checkbin(self, msg, fn):
+        # Patched: Use shutil.which for cross-platform compatibility
+        from shutil import which
+        self.debug('Search for {0}'.format(msg))
+        result = which(fn)
+        if result:
+            self.debug(' -> found at {0}'.format(result))
+            return result
+        self.error('{} not found, please install it.'.format(msg))
+        exit(1)
+
+"""
+        content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+        if content != original_content:
+            patches_applied.append("checkbin replaced with shutil.which")
             original_content = content
 
     if patches_applied:
