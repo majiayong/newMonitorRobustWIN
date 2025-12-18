@@ -78,6 +78,18 @@ def patch_android_target(targets_dir):
             patches_applied.append("_winreg import fixed for Python 3")
             original_content = content
 
+    # Patch 3: Fix distutils import for Python 3.12+
+    pattern = r"from distutils\.version import LooseVersion"
+    if re.search(pattern, content):
+        content = re.sub(
+            pattern,
+            "try:\n    from distutils.version import LooseVersion\nexcept ImportError:\n    from packaging.version import Version as LooseVersion  # Python 3.12+",
+            content
+        )
+        if content != original_content:
+            patches_applied.append("distutils import fixed for Python 3.12+")
+            original_content = content
+
     if patches_applied:
         with open(android_py, 'w', encoding='utf-8') as f:
             f.write(content)

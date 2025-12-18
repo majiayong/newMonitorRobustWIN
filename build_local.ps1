@@ -1,4 +1,4 @@
-# ============================================
+﻿# ============================================
 # 本地 Windows APK 构建脚本
 # ============================================
 
@@ -32,7 +32,7 @@ Write-Host ""
 
 # 检查并安装依赖
 Write-Host "[4/8] 检查 Python 依赖..."
-$packages = @("buildozer==1.5.0", "cython==0.29.36")
+$packages = @("setuptools", "packaging", "buildozer==1.5.0", "cython==0.29.36")
 foreach ($pkg in $packages) {
     $pkgName = $pkg.Split("==")[0]
     $installed = pip list --format=freeze | Select-String "^$pkgName=="
