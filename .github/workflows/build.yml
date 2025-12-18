@@ -198,36 +198,23 @@ jobs:
 
         # 由于Windows没有真正的root概念，我们需要修改buildozer
         Write-Host "=== Patching Buildozer for Windows ==="
-        $buildozerPath = (Get-Command buildozer).Source
-        $buildozerCode = Get-Content $buildozerPath -Raw
 
-        # 检查是否需要patch（查找root检查代码）
-        if ($buildozerCode -match "getuid") {
-          Write-Host "Buildozer contains root check, creating patched version..."
+        # 创建buildozer wrapper脚本来绕过root检查
+        $wrapperPath = ".\buildozer_wrapper.py"
+        $wrapperContent = "import sys`nimport os`n`n"
+        $wrapperContent += "# 临时禁用root检查：在Windows上伪装getuid`n"
+        $wrapperContent += "if sys.platform == 'win32':`n"
+        $wrapperContent += "    # 在Windows上，os.getuid不存在，但buildozer可能检查其他方式`n"
+        $wrapperContent += "    # 设置一个非零值来模拟非root用户`n"
+        $wrapperContent += "    if not hasattr(os, 'getuid'):`n"
+        $wrapperContent += "        os.getuid = lambda: 1000`n"
+        $wrapperContent += "`n"
+        $wrapperContent += "# 导入并运行buildozer`n"
+        $wrapperContent += "from buildozer.scripts.client import main`n"
+        $wrapperContent += "main()`n"
 
-          # 创建临时的buildozer wrapper脚本
-          $wrapperScript = @"
-import sys
-import os
-
-# 临时禁用root检查：在Windows上伪装getuid
-if sys.platform == 'win32':
-    # 保存原始的os.getuid（如果存在）
-    _original_getuid = getattr(os, 'getuid', None)
-    # 在Windows上，os.getuid不存在，但buildozer可能检查其他方式
-    # 设置一个非零值来模拟非root用户
-    if not hasattr(os, 'getuid'):
-        os.getuid = lambda: 1000
-
-# 导入并运行buildozer
-from buildozer.scripts.client import main
-main()
-"@
-
-          $wrapperPath = ".\buildozer_wrapper.py"
-          Set-Content -Path $wrapperPath -Value $wrapperScript -Encoding UTF8
-          Write-Host "Created wrapper script at: $wrapperPath"
-        }
+        Set-Content -Path $wrapperPath -Value $wrapperContent -Encoding UTF8
+        Write-Host "Created wrapper script at: $wrapperPath"
 
         Write-Host "=== Starting APK Build ==="
         Write-Host "This may take a while (30-60 minutes for first build)..."
