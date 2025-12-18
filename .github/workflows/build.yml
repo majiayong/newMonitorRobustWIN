@@ -91,8 +91,20 @@ jobs:
 
         # 检查是否已安装 git
         if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+          Write-Host "Installing Git..."
           choco install git -y
+          # 手动添加 Git 到 PATH
+          $gitPath = "C:\Program Files\Git\cmd"
+          if (Test-Path $gitPath) {
+            $env:Path = "$gitPath;$env:Path"
+            Write-Host "Git installed and added to PATH"
+          }
+        } else {
+          Write-Host "Git already installed"
         }
+
+        # 验证 git 可用
+        git --version
 
         # 检查是否已安装 openjdk
         if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
@@ -184,6 +196,12 @@ jobs:
       run: |
         # 激活虚拟环境
         .\buildozer-venv\Scripts\Activate.ps1
+
+        # 确保 Git 在 PATH 中
+        $gitPath = "C:\Program Files\Git\cmd"
+        if (Test-Path $gitPath) {
+          $env:Path = "$gitPath;$env:Path"
+        }
 
         Write-Host "=== Build Environment ==="
         Write-Host "JAVA_HOME: $env:JAVA_HOME"
