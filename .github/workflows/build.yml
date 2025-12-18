@@ -93,6 +93,33 @@ jobs:
           ${{ runner.os }}-buildozer-ndk27-
           ${{ runner.os }}-buildozer-
 
+    - name: Cache ccache directory
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-
+
+    - name: Setup ccache
+      run: |
+        # 安装并配置 ccache
+        if [[ "$RUNNER_OS" == "macOS" ]]; then
+          brew install ccache 2>/dev/null || echo "ccache already installed"
+        else
+          sudo apt-get install -y ccache
+        fi
+
+        # 配置 ccache
+        ccache --max-size=2G
+        ccache --set-config=compression=true
+        ccache --set-config=compression_level=6
+        ccache -z  # 重置统计
+
+        # 将 ccache 添加到 PATH
+        export PATH="/usr/local/opt/ccache/libexec:$PATH"
+        echo "PATH=/usr/local/opt/ccache/libexec:$PATH" >> $GITHUB_ENV
+
     - name: Verify buildozer.spec
       run: |
         # macOS激活虚拟环境
@@ -129,8 +156,34 @@ jobs:
         export http_proxy=http://127.0.0.1:7890
         export https_proxy=http://127.0.0.1:7890
 
+        # ========== 性能优化配置 ==========
+        # 1. 启用 ccache
+        export USE_CCACHE=1
+        export CCACHE_DIR=~/.ccache
+        export PATH="/usr/local/opt/ccache/libexec:$PATH"
+
+        # 2. 设置并行编译（使用所有CPU核心）
+        export MAKEFLAGS="-j$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
+        echo "使用 $MAKEFLAGS 进行并行编译"
+
+        # 3. Python-for-Android 并行编译环境变量
+        export MAX_JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+
+        # 4. 减少 Gradle 内存使用
+        export GRADLE_OPTS="-Xmx2048m -Dorg.gradle.jvmargs=-Xmx2048m"
+
+        echo "=== 性能优化设置 ==="
+        echo "USE_CCACHE: $USE_CCACHE"
+        echo "MAKEFLAGS: $MAKEFLAGS"
+        echo "MAX_JOBS: $MAX_JOBS"
+        ccache -s || echo "ccache stats not available"
+
         # 构建 APK
         buildozer -v android debug 2>&1 | tee build_log.txt
+
+        # 显示 ccache 统计
+        echo "=== ccache 编译统计 ==="
+        ccache -s || echo "ccache stats not available"
 
     - name: Check build result
       run: |

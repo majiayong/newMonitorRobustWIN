@@ -41,9 +41,21 @@ p4a.bootstrap = sdl2
 # 源码排除
 source.exclude_exts = spec
 
+# 包含字体文件
+source.include_patterns = fonts/*.otf,fonts/*.ttf
+
 # 日志
 log_level = 2
 warn_on_root = 1
+
+# ========== 性能优化配置 ==========
+# 启用 ccache 加速 C/C++ 编译（可节省 50% 编译时间）
+android.gradle_dependencies =
+
+# 并行编译配置
+# 让 Python-for-Android 使用多核心编译
+p4a.local_recipes =
+p4a.hook =
 
 [buildozer]
 log_level = 2
